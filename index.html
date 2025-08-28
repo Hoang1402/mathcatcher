@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Block Dodger — Web Game</title>
+  <style>
+    html, body { height: 100%; margin: 0; background:#0b1020; color:#e6e9f2; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Noto Sans', 'Helvetica Neue', Arial, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; }
+    #game { display:block; width:100vw; height:100vh; touch-action: none; }
+    /* On-screen controls (mobile) */
+    .btn { position: fixed; bottom: 2.2rem; z-index: 3; border: 2px solid rgba(255,255,255,0.2); padding: 0.9rem 1.2rem; border-radius: 999px; backdrop-filter: blur(8px); background: rgba(255,255,255,0.06); color: #fff; user-select: none; -webkit-user-select: none; font-weight: 600; letter-spacing: .02em;}
+    .btn:active { transform: scale(0.98); }
+    #left { left: 1.2rem; }
+    #right { right: 1.2rem; }
+    #start { left: 50%; transform: translateX(-50%); bottom: 6.2rem; display: none; }
+    @media (hover: hover) and (pointer: fine) { .btn { display:none; } }
+    a.badge { position: fixed; top: .75rem; right: .75rem; z-index:3; text-decoration:none; font-size:.85rem; color:#b7c0d8; opacity:.8 }
+    /* Test status pill */
+    #test-status { position: fixed; top: .75rem; left: .75rem; z-index: 3; padding: .35rem .6rem; border-radius: 999px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.18); color:#cfe8ff; font-size: .8rem; font-weight:600; letter-spacing:.02em; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <canvas id="game" aria-label="Block Dodger game canvas" role="img"></canvas>
+  <div id="test-status" aria-live="polite">Tests: running…</div>
+  <button class="btn" id="left" aria-label="Move left">⟵</button>
+  <button class="btn" id="right" aria-label="Move right">⟶</button>
+  <button class="btn" id="start" aria-label="Start game">BẮT ĐẦU</button>
+  <a class="badge" href="https://github.com/new" target="_blank" rel="noopener">↗ Deploy to GitHub Pages</a>
+  <script>
+  (() => {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+
+    // ==== Game state ====
+    const STATE = { MENU: 0, PLAYING: 1, OVER: 2 };
+    let state = STATE.MENU;
+
+    // ==== World ====
+    let W = 0, H = 0;
+    let last = 0;
+    let t = 0;
+    let score = 0;
+    let high = Number(localStorage.getItem('dodgerHighScore') || 0);
+
+    // Screen shake
+    let shake = 0;
+
+    // Player
+    const player = { x: 0, y: 0, w: 54, h: 14, speed: 480, vx: 0 };
+    const trail = []; // previous positions for motion trail
+
+    // Obstacles
+    const blocks = [];
+    let spawnEvery = 0.9;
+    let spawnTimer = 0;
+
+    // Particles (thruster + sparks)
+    const particles = [];
+
+    // Starfield background
+    const stars = [];
+    const STAR_COUNT = 140;
+
+    // Input
+    const keys = new Set();
+    let touchDir = 0; // -1 left, 1 right
+
+    function resize() {
+      const vw = window.innerWidth, vh = window.innerHeight;
+      W = Math.floor(vw * DPR); H = Math.floor(vh * DPR);
+      canvas.width = W; canvas.height = H;
+      canvas.style.width = vw + 'px'; canvas.style.height = vh + 'px';
+      player.x = Math.max(8, Math.min(W/DPR - player.w - 8, (player.x || (vw - player.w)/2)));
+      player.y = vh - 90;
+      // regen stars
+      stars.length = 0;
+      for (let i=0;i<STAR_COUNT;i++){
+        stars.push({ x: Math.random()*W, y: Math.random()*H, z: Math.random()*1+0.3, tw: Math.random()*0.6+0.4, base: Math.random()*0.5+0.3 });
+      }
+    }
+
+    // ==== Utilities ====
+    const rnd = (a,b)=>Math.random()*(b-a)+a;
+    function aabb(ax,ay,aw,ah,bx,by,bw,bh){ return ax<bx+bw && ax+aw>bx && ay<by+bh && ay+ah>by; }
+    function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
+    function clampPos(v, min=0){ return v < min ? min : v; }
+
+    // ==== Drawing helpers ====
+    function drawBackground(){
+      // Animated radial + vertical gradient
+      const cx = W/2, cy = H/2;
+      const rg = ctx.createRadialGradient(cx, cy, Math.max(60, 120*DPR), cx, cy, Math.max(W,H)*0.7);
+      const hue = (t*20)%360;
+      rg.addColorStop(0, `hsl(${200+hue*0.05} 70% 12%)`);
+      rg.addColorStop(1, `hsl(${220+hue*0.05} 70% 6%)`);
+      ctx.fillStyle = rg;
+      ctx.fillRect(0,0,W,H);
+
+      // Parallax starfield (guard against negative radius)
+      ctx.save();
+      for (const s of stars){
+        const sizeRaw = (s.z*1.8 + Math.sin((t+s.tw)*4)*0.6) * DPR;
+        const size = clampPos(sizeRaw, 0.12 * DPR); // never negative; small minimum so arc() always valid
+        const alphaRaw = s.base + Math.sin((t+s.tw)*3)*0.3;
+        ctx.globalAlpha = clamp(alphaRaw, 0.05, 1);
+        ctx.fillStyle = '#cfe8ff';
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, size, 0, Math.PI*2);
+        ctx.fill();
+        s.y += (20 + s.z*30) * (1/DPR) * (1/60);
+        if (s.y > H){ s.y = -2; s.x = Math.random()*W; }
+      }
+      ctx.restore();
+    }
+
+    function vignette(){
+      const g = ctx.createRadialGradient(W/2, H/2, Math.min(W,H)*0.45, W/2, H/2, Math.min(W,H)*0.8);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(0,0,0,0.35)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0,0,W,H);
+    }
+
+    function roundedRectPath(x,y,w,h,r){
+      const rr = Math.min(r, Math.min(w,h)/2);
+      ctx.beginPath();
+      ctx.moveTo(x+rr, y);
+      ctx.lineTo(x+w-rr, y);
+      ctx.arcTo(x+w, y, x+w, y+rr, rr);
+      ctx.lineTo(x+w, y+h-rr);
+      ctx.arcTo(x+w, y+h, x+w-rr, y+h, rr);
+      ctx.lineTo(x+rr, y+h);
+      ctx.arcTo(x, y+h, x, y+h-rr, rr);
+      ctx.lineTo(x, y+rr);
+      ctx.arcTo(x, y, x+rr, y, rr);
+      ctx.closePath();
+    }
+
+    function drawPlayer(){
+      const px = player.x*DPR, py = player.y*DPR, pw = player.w*DPR, ph = player.h*DPR;
+      // Motion trail
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i=0;i<trail.length;i++){
+        const tr = trail[i];
+        const alpha = (i+1)/trail.length * 0.25;
+        ctx.globalAlpha = alpha;
+        roundedRectPath(tr.x*DPR, tr.y*DPR, pw, ph, ph/2);
+        ctx.fillStyle = '#3fe0b5';
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // Body gradient
+      const lg = ctx.createLinearGradient(px, py, px, py+ph);
+      lg.addColorStop(0, '#2ff7bf');
+      lg.addColorStop(1, '#1e8dbd');
+      ctx.save();
+      roundedRectPath(px, py, pw, ph, ph/2);
+      ctx.fillStyle = lg;
+      ctx.shadowBlur = 20*DPR; ctx.shadowColor = '#72f1b8';
+      ctx.fill();
+      ctx.lineWidth = 2*DPR; ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+      ctx.stroke();
+      ctx.restore();
+
+      // Thruster glow
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.8;
+      const gx = (player.x + player.w/2 - Math.sign(player.vx||1)*player.w*0.55)*DPR;
+      const gy = (player.y + player.h/2)*DPR;
+      const gr = ctx.createRadialGradient(gx, gy, 2*DPR, gx, gy, 26*DPR);
+      gr.addColorStop(0, 'rgba(255,250,200,0.9)');
+      gr.addColorStop(1, 'rgba(255,170,50,0)');
+      ctx.fillStyle = gr;
+      ctx.beginPath(); ctx.arc(gx, gy, 26*DPR, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+
+    function emitParticles(x,y,dirx,diry,count,spdMin,spdMax,color,sizeMin,sizeMax,lifeMin,lifeMax){
+      for(let i=0;i<count;i++){
+        const ang = Math.atan2(diry,dirx) + rnd(-0.7,0.7);
+        const spd = rnd(spdMin, spdMax);
+        const sz = Math.max(0.5, rnd(sizeMin, sizeMax)); // ensure positive size
+        particles.push({ x, y, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd, life: rnd(lifeMin, lifeMax), max: 0, color, size: sz });
+      }
+    }
+
+    function spawnBlock(){
+      const lane = rnd(32, W/DPR - 32);
+      const width = rnd(40, 130);
+      const speed = 150 + t * 7;
+      const hue = 180 + Math.floor((t*16)%140);
+      const spin = rnd(-0.5, 0.5) * 0.6;
+      const angle = rnd(-0.05, 0.05);
+      const b = { x: clamp(lane - width/2, 8, W/DPR - width - 8), y: -30, w: width, h: rnd(12, 26), v: speed, color: `hsl(${hue} 90% 60%)`, angle, spin };
+      blocks.push(b);
+      // entry sparks
+      emitParticles((b.x+b.w/2)*DPR, 0, 0, 1, 10, 40, 120, 'rgba(114,241,184,0.9)', 1, 3, 0.3, 0.7);
+    }
+
+    function update(dt){
+      if (state !== STATE.PLAYING) return;
+      t += dt; score += dt * 10;
+      shake *= 0.9;
+
+      // Difficulty
+      spawnEvery = Math.max(0.22, 0.9 - t * 0.03);
+      spawnTimer += dt;
+      if (spawnTimer >= spawnEvery){ spawnTimer = 0; spawnBlock(); }
+
+      // Input
+      let dir = 0;
+      if (keys.has('ArrowLeft') || keys.has('KeyA')) dir -= 1;
+      if (keys.has('ArrowRight') || keys.has('KeyD')) dir += 1;
+      if (touchDir !== 0) dir = touchDir;
+      player.vx = dir * player.speed;
+
+      // Player move
+      player.x += player.vx * dt;
+      player.x = clamp(player.x, 8, W/DPR - player.w - 8);
+
+      // Trail
+      trail.unshift({ x: player.x, y: player.y });
+      if (trail.length > 18) trail.pop();
+
+      // Thruster particles when moving
+      if (Math.abs(player.vx) > 10){
+        const tx = (player.x + player.w/2 - Math.sign(player.vx)*player.w*0.55)*DPR;
+        const ty = (player.y + player.h/2)*DPR;
+        emitParticles(tx, ty, -Math.sign(player.vx), 0, 2, 30, 90, 'rgba(255,200,120,0.9)', 1, 3, 0.3, 0.6);
+      }
+
+      // Blocks
+      for (let i = blocks.length - 1; i >= 0; i--) {
+        const b = blocks[i];
+        b.y += b.v * dt;
+        b.angle += b.spin * dt * 0.5;
+        if (aabb(player.x, player.y, player.w, player.h, b.x, b.y, b.w, b.h)) {
+          state = STATE.OVER; high = Math.max(high, Math.floor(score));
+          localStorage.setItem('dodgerHighScore', String(high));
+          startBtn.style.display='';
+          shake = 18*DPR;
+          emitParticles((player.x+player.w/2)*DPR, (player.y+player.h/2)*DPR, 0, -1, 80, 60, 200, 'rgba(255,100,120,0.9)', 1, 3, 0.4, 1.0);
+        }
+        if (b.y > H/DPR + 60) blocks.splice(i,1);
+      }
+
+      // Particles update
+      for (let i=particles.length-1;i>=0;i--){
+        const p = particles[i];
+        if (!p.max) p.max = p.life;
+        p.life -= dt; if (p.life <= 0){ particles.splice(i,1); continue; }
+        p.x += p.vx * dt; p.y += p.vy * dt;
+        p.vx *= 0.98; p.vy += 28*dt; // slight gravity
+      }
+    }
+
+    function draw(){
+      drawBackground();
+
+      ctx.save();
+      if (shake>0){ ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake); }
+
+      // Subtle hex/grid overlay
+      ctx.save();
+      ctx.strokeStyle = 'rgba(114,241,184,0.07)'; ctx.lineWidth = 1*DPR;
+      const step = 28*DPR;
+      for (let x=0; x<W; x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+      for (let y=0; y<H; y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+      ctx.restore();
+
+      // Blocks with rotation + glow
+      for (const b of blocks){
+        const bx = (b.x + b.w/2)*DPR, by = (b.y + b.h/2)*DPR;
+        ctx.save();
+        ctx.translate(bx, by);
+        ctx.rotate(b.angle);
+        const ww = b.w*DPR, hh = b.h*DPR;
+        const g = ctx.createLinearGradient(-ww/2, -hh/2, ww/2, hh/2);
+        g.addColorStop(0, 'rgba(30,42,74,0.95)');
+        g.addColorStop(1, 'rgba(10,18,36,0.95)');
+        ctx.fillStyle = g;
+        ctx.shadowBlur = 16*DPR; ctx.shadowColor = b.color;
+        roundedRectPath(-ww/2, -hh/2, ww, hh, Math.min(10*DPR, hh/2));
+        ctx.fill();
+        ctx.lineWidth = 2*DPR; ctx.strokeStyle = b.color;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Player
+      drawPlayer();
+
+      // Particles draw (guard radius)
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const p of particles){
+        const alpha = Math.max(0, p.life / p.max);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        const r = clampPos(p.size*DPR, 0.12*DPR);
+        ctx.arc(p.x, p.y, r, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      ctx.restore(); // end shake scope
+
+      // HUD
+      ctx.save();
+      ctx.shadowBlur = 10*DPR; ctx.shadowColor = 'rgba(114,241,184,.5)';
+      ctx.font = `600 ${18*DPR}px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial`;
+      ctx.fillStyle = '#e6e9f2';
+      ctx.fillText(`Điểm: ${Math.floor(score)}`, 16*DPR, 12*DPR);
+      ctx.font = `600 ${14*DPR}px system-ui`;
+      ctx.fillStyle = '#b7c0d8';
+      ctx.fillText(`Kỷ lục: ${high}`, 16*DPR, 34*DPR);
+      ctx.restore();
+
+      if (state === STATE.MENU) {
+        centerText('BLOCK DODGER', 32);
+        centerText('Tránh các khối rơi • A/D hoặc ◀ ▶ để di chuyển', 16, 28);
+        centerText('Nhấn Space / chạm màn hình để bắt đầu', 16, 60, '#9dd5c3');
+      } else if (state === STATE.OVER) {
+        centerText('GAME OVER', 28);
+        centerText('Nhấn R / chạm để chơi lại', 16, 28, '#b7c0d8');
+      }
+
+      vignette();
+
+      // Footer
+      footerText('Open-source • Hiệu ứng glow + parallax • Tương thích mobile');
+    }
+
+    function centerText(txt, size=24, yOffset=0, color='#e6e9f2'){
+      ctx.save();
+      ctx.font = `700 ${size*DPR}px system-ui, -apple-system, Segoe UI, Roboto`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillStyle = color;
+      ctx.shadowBlur = 10*DPR; ctx.shadowColor = 'rgba(114,241,184,.45)';
+      ctx.fillText(txt, W/2, H/2 - 80*DPR + yOffset*DPR);
+      ctx.restore();
+    }
+
+    function footerText(txt){
+      ctx.save();
+      ctx.font = `600 ${12*DPR}px system-ui`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillStyle = 'rgba(230,233,242,0.7)';
+      ctx.fillText(txt, W/2, H - 10*DPR);
+      ctx.restore();
+    }
+
+    function reset() {
+      t = 0; score = 0; spawnEvery = 0.9; spawnTimer = 0; blocks.length = 0; particles.length = 0; trail.length = 0;
+      player.x = (W/DPR - player.w)/2; player.vx = 0; shake = 0;
+    }
+
+    function startGame(){ reset(); state = STATE.PLAYING; startBtn.style.display='none'; }
+
+    function frame(ts){
+      if (!last) last = ts;
+      const dt = Math.min(0.05, (ts - last) / 1000);
+      last = ts; update(dt); draw(); requestAnimationFrame(frame);
+    }
+
+    // ==== Events ====
+    window.addEventListener('resize', resize);
+    document.addEventListener('visibilitychange', () => { if (document.hidden && state === STATE.PLAYING) { state = STATE.MENU; startBtn.style.display=''; } });
+
+    document.addEventListener('keydown', (e) => {
+      if (['ArrowLeft','ArrowRight','Space','KeyA','KeyD','KeyR','KeyT'].includes(e.code)) e.preventDefault();
+      keys.add(e.code);
+      if (state === STATE.MENU && e.code === 'Space') startGame();
+      if (state === STATE.OVER && e.code === 'KeyR') startGame();
+      if (e.code === 'KeyT') runTests();
+    });
+    document.addEventListener('keyup', (e) => keys.delete(e.code));
+
+    const leftBtn = document.getElementById('left');
+    const rightBtn = document.getElementById('right');
+    const startBtn = document.getElementById('start');
+    const testStatus = document.getElementById('test-status');
+
+    function bindHold(btn, dir){
+      const on = (ev)=>{ ev.preventDefault(); touchDir = dir; };
+      const off = (ev)=>{ ev.preventDefault(); if (touchDir === dir) touchDir = 0; };
+      btn.addEventListener('touchstart', on, {passive:false});
+      btn.addEventListener('touchend', off, {passive:false});
+      btn.addEventListener('mousedown', on);
+      btn.addEventListener('mouseup', off);
+      btn.addEventListener('mouseleave', off);
+    }
+    bindHold(leftBtn, -1); bindHold(rightBtn, 1);
+
+    canvas.addEventListener('pointerdown', () => { if (state === STATE.MENU || state === STATE.OVER) startGame(); });
+    startBtn.addEventListener('click', startGame);
+
+    // ==== Simple test harness ====
+    function assert(cond, msg){ if(!cond){ throw new Error(msg || 'Assertion failed'); } }
+
+    function runTests(){
+      try{
+        // Test 1: Star size clamp never negative, even at worst-case sin
+        for(let i=0;i<2000;i++){
+          const s = { z: Math.random()*1+0.3, tw: Math.random()*0.6+0.4, base: Math.random()*0.5+0.3 };
+          const sizeRaw = (s.z*1.8 + Math.sin((i*0.01+s.tw)*4)*0.6) * DPR;
+          const size = clampPos(sizeRaw, 0.12*DPR);
+          assert(size >= 0, 'Star radius should be non-negative');
+        }
+
+        // Test 2: Particle sizes always positive
+        const before = particles.length;
+        emitParticles(0,0,1,0,20,10,50,'#fff',1,3,0.2,0.5);
+        for(let i=before;i<particles.length;i++){
+          assert(particles[i].size > 0, 'Particle size should be > 0');
+        }
+
+        // Test 3: Arc guard value
+        assert(clampPos(-1,0) === 0, 'clampPos should clamp negatives to 0');
+
+        testStatus.textContent = 'Tests: ✓ All passed (press T to re-run)';
+        testStatus.style.color = '#9ef5c8';
+      } catch(err){
+        console.error('[TESTS FAILED]', err);
+        testStatus.textContent = 'Tests: ✗ ' + err.message + ' (press T to re-run)';
+        testStatus.style.color = '#ffb3c1';
+      }
+    }
+
+    // ==== Init ====
+    resize(); requestAnimationFrame(frame);
+    if (matchMedia('(pointer: coarse)').matches) startBtn.style.display='';
+
+    // Run tests once at startup
+    runTests();
+  })();
+  </script>
+</body>
+</html>
