@@ -1,9 +1,10 @@
+\
 <!doctype html>
 <html lang="vi">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Block Dodger — Web Game</title>
+  <title>Math Catcher — Web Game</title>
   <style>
     html, body { height: 100%; margin: 0; background:#0b1020; color:#e6e9f2; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Noto Sans', 'Helvetica Neue', Arial, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; }
     #game { display:block; width:100vw; height:100vh; touch-action: none; }
@@ -14,22 +15,89 @@
     #right { right: 1.2rem; }
     #start { left: 50%; transform: translateX(-50%); bottom: 6.2rem; display: none; }
     @media (hover: hover) and (pointer: fine) { .btn { display:none; } }
-    a.badge { position: fixed; top: .75rem; right: .75rem; z-index:3; text-decoration:none; font-size:.85rem; color:#b7c0d8; opacity:.8 }
-    /* Test status pill */
-    #test-status { position: fixed; top: .75rem; left: .75rem; z-index: 3; padding: .35rem .6rem; border-radius: 999px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.18); color:#cfe8ff; font-size: .8rem; font-weight:600; letter-spacing:.02em; pointer-events: none; }
+
+    /* Centered level modal */
+    #level-modal {
+      position: fixed; inset: 0; display: grid; place-items: center; z-index: 4;
+      backdrop-filter: blur(6px);
+      background: rgba(2,6,23,0.45);
+    }
+    #level-modal .card {
+      min-width: min(92vw, 560px);
+      padding: 1.2rem;
+      border-radius: 1rem;
+      border: 1px solid rgba(255,255,255,.12);
+      background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+      text-align: center;
+    }
+    #level-modal h2 {
+      margin: 0 0 .6rem 0;
+      font-size: 1.3rem;
+      letter-spacing: .02em;
+    }
+    #level-modal p {
+      margin: 0 0 1rem 0;
+      color: #b7c0d8;
+      font-size: .95rem;
+    }
+    #level-modal .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: .6rem;
+    }
+    #level-modal .lvl {
+      padding: .7rem .6rem;
+      border-radius: .8rem;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.06);
+      color:#e6e9f2; font-size:1rem; font-weight:700; letter-spacing:.02em; cursor: pointer;
+    }
+    #level-modal .lvl:hover { background: rgba(114,241,184,.12); border-color: rgba(114,241,184,.38); }
+
+    /* Hide test status UI (keeps tests runnable with T but invisible) */
+    #test-status { display:none; }
   </style>
 </head>
 <body>
-  <canvas id="game" aria-label="Block Dodger game canvas" role="img"></canvas>
-  <div id="test-status" aria-live="polite">Tests: running…</div>
+  <canvas id="game" aria-label="Math Catcher game canvas" role="img"></canvas>
+  <!-- hidden test status to avoid UI text "Tests" -->
+  <div id="test-status" aria-live="polite"></div>
+
+  <!-- Centered Level Modal -->
+  <div id="level-modal" aria-modal="true" role="dialog" aria-label="Chọn cấp độ">
+    <div class="card">
+      <h2>Chọn cấp độ</h2>
+      <div id="scoreboard" style="display:none; margin:.2rem 0 1rem 0; text-align:center;">
+        <h3 style="margin:.4rem 0 .6rem 0; font-size:1.15rem;">Bảng điểm</h3>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.4rem;font-weight:600;">
+          <div style="text-align:right;color:#b7c0d8;">Điểm:</div><div id="sb-score" style="text-align:left;">0</div>
+          <div style="text-align:right;color:#b7c0d8;">Kỷ lục:</div><div id="sb-high" style="text-align:left;">0</div>
+          <div style="text-align:right;color:#b7c0d8;">Đúng:</div><div id="sb-correct" style="text-align:left;">0</div>
+          <div style="text-align:right;color:#b7c0d8;">Sai:</div><div id="sb-wrong" style="text-align:left;">0</div>
+          <div style="text-align:right;color:#b7c0d8;">Bỏ lỡ:</div><div id="sb-missed" style="text-align:left;">0</div>
+          <div style="text-align:right;color:#b7c0d8;">Độ chính xác:</div><div id="sb-acc" style="text-align:left;">0%</div>
+        </div>
+        <hr style="margin:1rem 0;border:0;border-top:1px solid rgba(255,255,255,.14)">
+      </div>
+      <p>Chọn lớp để bắt đầu chơi. Bạn có thể đổi cấp độ sau mỗi lượt thua.</p>
+      <div class="grid">
+        <button class="lvl" data-level="G1" title="Lớp 1">Lớp 1</button>
+        <button class="lvl" data-level="G23" title="Lớp 2–3">Lớp 2–3</button>
+        <button class="lvl" data-level="G45" title="Lớp 4–5">Lớp 4–5</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- On-screen controls -->
   <button class="btn" id="left" aria-label="Move left">⟵</button>
   <button class="btn" id="right" aria-label="Move right">⟶</button>
   <button class="btn" id="start" aria-label="Start game">BẮT ĐẦU</button>
-  <a class="badge" href="https://github.com/new" target="_blank" rel="noopener">↗ Deploy to GitHub Pages</a>
+
   <script>
   (() => {
     const canvas = document.getElementById('game');
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: true });
     const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
 
     // ==== Game state ====
@@ -37,71 +105,128 @@
     let state = STATE.MENU;
 
     // ==== World ====
-    let W = 0, H = 0;
-    let last = 0;
-    let t = 0;
-    let score = 0;
-    let high = Number(localStorage.getItem('dodgerHighScore') || 0);
-
-    // Screen shake
+    let W = 0, H = 0; let last = 0; let t = 0;
+    let score = 0; let high = Number(localStorage.getItem('mathCatcherHighScore') || 0);
     let shake = 0;
 
-    // Player
-    const player = { x: 0, y: 0, w: 54, h: 14, speed: 480, vx: 0 };
-    const trail = []; // previous positions for motion trail
+    // Player (capsule)
+    const player = { x: 0, y: 0, w: 60, h: 16, speed: 520, vx: 0 };
+    const trail = [];
 
-    // Obstacles
-    const blocks = [];
-    let spawnEvery = 0.9;
-    let spawnTimer = 0;
+    // Lanes + answers
+    const lanes = { count: 3, width: 0, centers: [] };
+    let lives = 3; let combo = 0; let problem = null; let activeBlocks = []; let rowSpeed = 180; let lastRowSolvedAt = 0;
+    // Stats for scoreboard
+    let stats = {correct:0, wrong:0, missed:0, maxCombo:0};
 
-    // Particles (thruster + sparks)
-    const particles = [];
-
-    // Starfield background
-    const stars = [];
-    const STAR_COUNT = 140;
+    // FX
+    const particles = []; const stars = []; const STAR_COUNT = 140;
 
     // Input
-    const keys = new Set();
-    let touchDir = 0; // -1 left, 1 right
+    const keys = new Set(); let touchDir = 0;
 
-    function resize() {
-      const vw = window.innerWidth, vh = window.innerHeight;
-      W = Math.floor(vw * DPR); H = Math.floor(vh * DPR);
-      canvas.width = W; canvas.height = H;
-      canvas.style.width = vw + 'px'; canvas.style.height = vh + 'px';
-      player.x = Math.max(8, Math.min(W/DPR - player.w - 8, (player.x || (vw - player.w)/2)));
-      player.y = vh - 90;
+    // Levels
+    let level = 'G1'; // 'G1' | 'G23' | 'G45'
+
+    // Modal
+    const levelModal = document.getElementById('level-modal');
+    const sbEl = document.getElementById('scoreboard');
+    const sbScore = document.getElementById('sb-score');
+    const sbHigh = document.getElementById('sb-high');
+    const sbCorrect = document.getElementById('sb-correct');
+    const sbWrong = document.getElementById('sb-wrong');
+    const sbMissed = document.getElementById('sb-missed');
+    const sbAcc = document.getElementById('sb-acc');
+
+    function updateScoreboard() {
+      if (!sbEl) return;
+      const total = stats.correct + stats.wrong + stats.missed;
+      const acc = total ? Math.round((stats.correct/total)*100) : 0;
+      sbScore.textContent = String(Math.floor(score));
+      sbHigh.textContent = String(Math.max(high, Math.floor(score)));
+      sbCorrect.textContent = String(stats.correct);
+      sbWrong.textContent = String(stats.wrong);
+      sbMissed.textContent = String(stats.missed);
+      sbAcc.textContent = acc + '%';
+      sbEl.style.display = '';
+    }
+    function hideScoreboard(){ if(sbEl) sbEl.style.display='none'; }
+
+    function showLevelModal(){ levelModal.style.display = ''; }
+    function hideLevelModal(){ levelModal.style.display = 'none'; }
+
+    function getSettings(){
+      if (level === 'G1') return { ops:['+'], range:{ add:10, sub:10, mul:5, div:5 } };
+      if (level === 'G23') return { ops:['+','-','×','÷'], range:{ add:20, sub:20, mul:10, div:10 } };
+      return { ops:['+','-','×','÷'], range:{ add:100, sub:100, mul:12, div:12 } };
+    }
+
+    function resize(){
+      const vw = window.innerWidth, vh = window.innerHeight; W = Math.floor(vw*DPR); H = Math.floor(vh*DPR);
+      canvas.width = W; canvas.height = H; canvas.style.width = vw+'px'; canvas.style.height = vh+'px';
+      player.x = Math.max(8, Math.min(W/DPR - player.w - 8, (player.x || (vw - player.w)/2))); player.y = vh - 90;
+      lanes.width = (W/DPR) / lanes.count; lanes.centers = Array.from({length: lanes.count}, (_,i)=> lanes.width*(i+0.5));
       // regen stars
-      stars.length = 0;
-      for (let i=0;i<STAR_COUNT;i++){
-        stars.push({ x: Math.random()*W, y: Math.random()*H, z: Math.random()*1+0.3, tw: Math.random()*0.6+0.4, base: Math.random()*0.5+0.3 });
-      }
+      stars.length = 0; for (let i=0;i<STAR_COUNT;i++) stars.push({ x: Math.random()*W, y: Math.random()*H, z: Math.random()*1+0.3, tw: Math.random()*0.6+0.4, base: Math.random()*0.5+0.3 });
     }
 
     // ==== Utilities ====
-    const rnd = (a,b)=>Math.random()*(b-a)+a;
-    function aabb(ax,ay,aw,ah,bx,by,bw,bh){ return ax<bx+bw && ax+aw>bx && ay<by+bh && ay+ah>by; }
+    const rnd=(a,b)=>Math.random()*(b-a)+a; const rrnd=(a,b)=>Math.floor(rnd(a,b+1));
     function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
     function clampPos(v, min=0){ return v < min ? min : v; }
+    function aabb(ax,ay,aw,ah,bx,by,bw,bh){ return ax<bx+bw && ax+aw>bx && ay<by+bh && ay+ah>by; }
 
-    // ==== Drawing helpers ====
+    // ==== Math problem ====
+    function genProblem(){
+      const s = getSettings(); const op = s.ops[rrnd(0, s.ops.length-1)];
+      let a,b,txt,ans;
+      if (op === '+') { const R=s.range.add; a=rrnd(0,R); b=rrnd(0,R); ans=a+b; txt=`${a} + ${b} = ?`; }
+      else if (op === '-') { const R=s.range.sub; a=rrnd(0,R); b=rrnd(0,R); if (b>a) [a,b]=[b,a]; ans=a-b; txt=`${a} − ${b} = ?`; }
+      else if (op === '×') { const R=s.range.mul; a=rrnd(0,R); b=rrnd(0,R); ans=a*b; txt=`${a} × ${b} = ?`; }
+      else { const R=s.range.div; b=rrnd(1,R); ans=rrnd(1,R); a=b*ans; txt=`${a} ÷ ${b} = ?`; }
+      return { text: txt, ans };
+    }
+
+    function makeOptions(ans){
+      const opts = new Set([ans]);
+      const baseDev = Math.max(2, Math.round(Math.max(5, Math.abs(ans))*0.2));
+      while (opts.size < 3){
+        const delta = rrnd(-baseDev, baseDev) || 1;
+        const cand = ans + delta;
+        if (!opts.has(cand)) opts.add(cand);
+      }
+      return Array.from(opts).sort(()=>Math.random()-0.5);
+    }
+
+    function spawnRow(){
+      if (!problem) problem = genProblem();
+      const options = makeOptions(problem.ans);
+      const bw = lanes.width*0.68, bh = 34; const stroke = '#8aa3d1'; // unified color
+      const laneCountNeeded = options.length;
+      const centers = (lanes.centers && lanes.centers.length>=laneCountNeeded)
+        ? lanes.centers.slice(0,laneCountNeeded)
+        : Array.from({length: laneCountNeeded}, (_,i)=> (W/Math.max(1,DPR)/laneCountNeeded)*(i+0.5));
+      activeBlocks = options.map((val, i) => ({
+        x: clamp(centers[i] - bw/2, 8, W/Math.max(1,DPR) - bw - 8),
+        y: -60, w: bw, h: bh, v: rowSpeed + t*6, value: val, correct: (val===problem.ans),
+        uiColor: stroke, angle: 0, spin: rnd(-0.03,0.03)
+      }));
+    }
+
+    // ==== Drawing ====
     function drawBackground(){
-      // Animated radial + vertical gradient
       const cx = W/2, cy = H/2;
       const rg = ctx.createRadialGradient(cx, cy, Math.max(60, 120*DPR), cx, cy, Math.max(W,H)*0.7);
       const hue = (t*20)%360;
       rg.addColorStop(0, `hsl(${200+hue*0.05} 70% 12%)`);
       rg.addColorStop(1, `hsl(${220+hue*0.05} 70% 6%)`);
-      ctx.fillStyle = rg;
-      ctx.fillRect(0,0,W,H);
+      ctx.fillStyle = rg; ctx.fillRect(0,0,W,H);
 
       // Parallax starfield (guard against negative radius)
       ctx.save();
       for (const s of stars){
         const sizeRaw = (s.z*1.8 + Math.sin((t+s.tw)*4)*0.6) * DPR;
-        const size = clampPos(sizeRaw, 0.12 * DPR); // never negative; small minimum so arc() always valid
+        const size = clampPos(sizeRaw, 0.12 * DPR);
         const alphaRaw = s.base + Math.sin((t+s.tw)*3)*0.3;
         ctx.globalAlpha = clamp(alphaRaw, 0.05, 1);
         ctx.fillStyle = '#cfe8ff';
@@ -118,8 +243,7 @@
       const g = ctx.createRadialGradient(W/2, H/2, Math.min(W,H)*0.45, W/2, H/2, Math.min(W,H)*0.8);
       g.addColorStop(0, 'rgba(0,0,0,0)');
       g.addColorStop(1, 'rgba(0,0,0,0.35)');
-      ctx.fillStyle = g;
-      ctx.fillRect(0,0,W,H);
+      ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
     }
 
     function roundedRectPath(x,y,w,h,r){
@@ -138,306 +262,186 @@
     }
 
     function drawPlayer(){
-      const px = player.x*DPR, py = player.y*DPR, pw = player.w*DPR, ph = player.h*DPR;
-      // Motion trail
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
+      const px=player.x*DPR, py=player.y*DPR, pw=player.w*DPR, ph=player.h*DPR;
+      // motion trail
+      ctx.save(); ctx.globalCompositeOperation='lighter';
       for (let i=0;i<trail.length;i++){
-        const tr = trail[i];
-        const alpha = (i+1)/trail.length * 0.25;
-        ctx.globalAlpha = alpha;
+        const tr=trail[i]; const alpha=(i+1)/trail.length*0.25; ctx.globalAlpha=alpha;
         roundedRectPath(tr.x*DPR, tr.y*DPR, pw, ph, ph/2);
-        ctx.fillStyle = '#3fe0b5';
-        ctx.fill();
+        ctx.fillStyle='#3fe0b5'; ctx.fill();
       }
       ctx.restore();
+      // body
+      const lg = ctx.createLinearGradient(px, py, px, py+ph); lg.addColorStop(0,'#2ff7bf'); lg.addColorStop(1,'#1e8dbd');
+      ctx.save(); roundedRectPath(px,py,pw,ph,ph/2); ctx.fillStyle=lg; ctx.shadowBlur=20*DPR; ctx.shadowColor='#72f1b8'; ctx.fill(); ctx.lineWidth=2*DPR; ctx.strokeStyle='rgba(255,255,255,0.4)'; ctx.stroke(); ctx.restore();
+      // thruster glow
+      ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.8; const gx=(player.x+player.w/2-Math.sign(player.vx||1)*player.w*0.55)*DPR; const gy=(player.y+player.h/2)*DPR; const gr=ctx.createRadialGradient(gx,gy,2*DPR,gx,gy,26*DPR); gr.addColorStop(0,'rgba(255,250,200,0.9)'); gr.addColorStop(1,'rgba(255,170,50,0)'); ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(gx,gy,26*DPR,0,Math.PI*2); ctx.fill(); ctx.restore();
+    }
 
-      // Body gradient
-      const lg = ctx.createLinearGradient(px, py, px, py+ph);
-      lg.addColorStop(0, '#2ff7bf');
-      lg.addColorStop(1, '#1e8dbd');
-      ctx.save();
-      roundedRectPath(px, py, pw, ph, ph/2);
-      ctx.fillStyle = lg;
-      ctx.shadowBlur = 20*DPR; ctx.shadowColor = '#72f1b8';
-      ctx.fill();
-      ctx.lineWidth = 2*DPR; ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-      ctx.stroke();
-      ctx.restore();
-
-      // Thruster glow
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = 0.8;
-      const gx = (player.x + player.w/2 - Math.sign(player.vx||1)*player.w*0.55)*DPR;
-      const gy = (player.y + player.h/2)*DPR;
-      const gr = ctx.createRadialGradient(gx, gy, 2*DPR, gx, gy, 26*DPR);
-      gr.addColorStop(0, 'rgba(255,250,200,0.9)');
-      gr.addColorStop(1, 'rgba(255,170,50,0)');
-      ctx.fillStyle = gr;
-      ctx.beginPath(); ctx.arc(gx, gy, 26*DPR, 0, Math.PI*2); ctx.fill();
+    function drawBlock(b){
+      ctx.save(); const bx=(b.x + b.w/2)*DPR, by=(b.y + b.h/2)*DPR; ctx.translate(bx,by); ctx.rotate(b.angle);
+      const ww=b.w*DPR, hh=b.h*DPR; const g=ctx.createLinearGradient(-ww/2,-hh/2,ww/2,hh/2); g.addColorStop(0,'rgba(30,42,74,0.95)'); g.addColorStop(1,'rgba(10,18,36,0.95)');
+      ctx.fillStyle=g; ctx.shadowBlur=16*DPR; ctx.shadowColor=b.uiColor; roundedRectPath(-ww/2,-hh/2,ww,hh,Math.min(10*DPR,hh/2)); ctx.fill(); ctx.lineWidth=2*DPR; ctx.strokeStyle=b.uiColor; ctx.stroke();
+      ctx.shadowBlur=0; ctx.font=`700 ${16*DPR}px system-ui`; ctx.fillStyle='#e6e9f2'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(String(b.value), 0, 1);
       ctx.restore();
     }
 
-    function emitParticles(x,y,dirx,diry,count,spdMin,spdMax,color,sizeMin,sizeMax,lifeMin,lifeMax){
-      for(let i=0;i<count;i++){
-        const ang = Math.atan2(diry,dirx) + rnd(-0.7,0.7);
-        const spd = rnd(spdMin, spdMax);
-        const sz = Math.max(0.5, rnd(sizeMin, sizeMax)); // ensure positive size
-        particles.push({ x, y, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd, life: rnd(lifeMin, lifeMax), max: 0, color, size: sz });
-      }
+    function drawHUD(){
+      ctx.save(); ctx.shadowBlur=10*DPR; ctx.shadowColor='rgba(114,241,184,.5)';
+      // Centered question (bigger)
+      ctx.font=`700 ${28*DPR}px system-ui`;
+      ctx.fillStyle='#e6e9f2';
+      const q = problem? problem.text : 'Hãy bắt khối có đáp án đúng!';
+      ctx.textAlign='center'; ctx.textBaseline='top';
+      ctx.fillText(q, W/2, 12*DPR);
+      // Centered status line
+      ctx.font=`600 ${15*DPR}px system-ui`; ctx.fillStyle='#b7c0d8';
+      const levelLabel=level==='G1'?'Lớp 1':(level==='G23'?'Lớp 2–3':'Lớp 4–5');
+      ctx.fillText(`Cấp độ: ${levelLabel}   •   Điểm: ${Math.floor(score)}   •   Combo: x${combo}`, W/2, 44*DPR);
+      // Hearts keep at top-right
+      ctx.font=`700 ${18*DPR}px system-ui`; ctx.fillStyle='#ff8aa1'; ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+      let hearts=''; for(let i=0;i<lives;i++) hearts+='❤ ';
+      ctx.fillText(hearts.trim(), W-140*DPR, 18*DPR);
+      ctx.restore();
     }
 
-    function spawnBlock(){
-      const lane = rnd(32, W/DPR - 32);
-      const width = rnd(40, 130);
-      const speed = 150 + t * 7;
-      const hue = 180 + Math.floor((t*16)%140);
-      const spin = rnd(-0.5, 0.5) * 0.6;
-      const angle = rnd(-0.05, 0.05);
-      const b = { x: clamp(lane - width/2, 8, W/DPR - width - 8), y: -30, w: width, h: rnd(12, 26), v: speed, color: `hsl(${hue} 90% 60%)`, angle, spin };
-      blocks.push(b);
-      // entry sparks
-      emitParticles((b.x+b.w/2)*DPR, 0, 0, 1, 10, 40, 120, 'rgba(114,241,184,0.9)', 1, 3, 0.3, 0.7);
-    }
-
+    // ==== Update ====
     function update(dt){
       if (state !== STATE.PLAYING) return;
-      t += dt; score += dt * 10;
-      shake *= 0.9;
+      t += dt; score += dt * 2;
+      rowSpeed = 160 + Math.min(220, t*10 + combo*2);
 
-      // Difficulty
-      spawnEvery = Math.max(0.22, 0.9 - t * 0.03);
-      spawnTimer += dt;
-      if (spawnTimer >= spawnEvery){ spawnTimer = 0; spawnBlock(); }
-
-      // Input
-      let dir = 0;
-      if (keys.has('ArrowLeft') || keys.has('KeyA')) dir -= 1;
-      if (keys.has('ArrowRight') || keys.has('KeyD')) dir += 1;
-      if (touchDir !== 0) dir = touchDir;
+      // input
+      let dir = 0; if (keys.has('ArrowLeft')||keys.has('KeyA')) dir -= 1; if (keys.has('ArrowRight')||keys.has('KeyD')) dir += 1; if (touchDir!==0) dir = touchDir;
       player.vx = dir * player.speed;
+      player.x += player.vx * dt; player.x = clamp(player.x, 8, W/DPR - player.w - 8);
+      trail.unshift({ x: player.x, y: player.y }); if (trail.length>18) trail.pop();
 
-      // Player move
-      player.x += player.vx * dt;
-      player.x = clamp(player.x, 8, W/DPR - player.w - 8);
+      if (activeBlocks.length === 0 && (t - lastRowSolvedAt) > 0.25) spawnRow();
 
-      // Trail
-      trail.unshift({ x: player.x, y: player.y });
-      if (trail.length > 18) trail.pop();
-
-      // Thruster particles when moving
-      if (Math.abs(player.vx) > 10){
-        const tx = (player.x + player.w/2 - Math.sign(player.vx)*player.w*0.55)*DPR;
-        const ty = (player.y + player.h/2)*DPR;
-        emitParticles(tx, ty, -Math.sign(player.vx), 0, 2, 30, 90, 'rgba(255,200,120,0.9)', 1, 3, 0.3, 0.6);
-      }
-
-      // Blocks
-      for (let i = blocks.length - 1; i >= 0; i--) {
-        const b = blocks[i];
-        b.y += b.v * dt;
-        b.angle += b.spin * dt * 0.5;
-        if (aabb(player.x, player.y, player.w, player.h, b.x, b.y, b.w, b.h)) {
-          state = STATE.OVER; high = Math.max(high, Math.floor(score));
-          localStorage.setItem('dodgerHighScore', String(high));
-          startBtn.style.display='';
-          shake = 18*DPR;
-          emitParticles((player.x+player.w/2)*DPR, (player.y+player.h/2)*DPR, 0, -1, 80, 60, 200, 'rgba(255,100,120,0.9)', 1, 3, 0.4, 1.0);
+      let solvedThisFrame = false; let missedCorrect = false;
+      for (let i=activeBlocks.length-1; i>=0; i--){
+        const b=activeBlocks[i]; b.y += b.v * dt; b.angle += b.spin * dt;
+        if (aabb(player.x,player.y,player.w,player.h,b.x,b.y,b.w,b.h)){
+          if (b.correct){ score+=100+combo*10; combo++; if(combo>stats.maxCombo) stats.maxCombo=combo; stats.correct++; solvedThisFrame=true;
+            emitParticles((player.x+player.w/2)*DPR,(player.y)*DPR,0,-1,80,70,140,'rgba(114,241,184,0.9)',1,3,0.3,0.8);
+          } else { lives=Math.max(0,lives-1); stats.wrong++; combo=0; shake=18*DPR;
+            emitParticles((player.x+player.w/2)*DPR,(player.y+player.h/2)*DPR,0,-1,60,60,160,'rgba(255,100,120,0.9)',1,3,0.4,1.0);
+          }
+          activeBlocks.splice(i,1);
+        } else if (b.y > H/DPR + 10){
+          if (b.correct) missedCorrect=true; activeBlocks.splice(i,1);
         }
-        if (b.y > H/DPR + 60) blocks.splice(i,1);
       }
-
-      // Particles update
+      if (solvedThisFrame){ problem=genProblem(); lastRowSolvedAt=t; }
+      if (missedCorrect){ lives=Math.max(0,lives-1); stats.missed++; combo=0; lastRowSolvedAt=t; problem=genProblem(); }
+      if (lives<=0){
+        state=STATE.OVER;
+        localStorage.setItem('mathCatcherHighScore', String(Math.max(high, Math.floor(score))));
+        updateScoreboard();
+        showLevelModal(); // show level choices again after losing
+      }
+      // particles
       for (let i=particles.length-1;i>=0;i--){
-        const p = particles[i];
-        if (!p.max) p.max = p.life;
-        p.life -= dt; if (p.life <= 0){ particles.splice(i,1); continue; }
-        p.x += p.vx * dt; p.y += p.vy * dt;
-        p.vx *= 0.98; p.vy += 28*dt; // slight gravity
+        const p=particles[i]; if(!p.max) p.max=p.life; p.life-=dt; if(p.life<=0){ particles.splice(i,1); continue; }
+        p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=0.98; p.vy+=30*dt;
       }
     }
 
+    // ==== Draw ====
     function draw(){
       drawBackground();
-
-      ctx.save();
-      if (shake>0){ ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake); }
-
-      // Subtle hex/grid overlay
-      ctx.save();
-      ctx.strokeStyle = 'rgba(114,241,184,0.07)'; ctx.lineWidth = 1*DPR;
-      const step = 28*DPR;
-      for (let x=0; x<W; x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
-      for (let y=0; y<H; y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-      ctx.restore();
-
-      // Blocks with rotation + glow
-      for (const b of blocks){
-        const bx = (b.x + b.w/2)*DPR, by = (b.y + b.h/2)*DPR;
-        ctx.save();
-        ctx.translate(bx, by);
-        ctx.rotate(b.angle);
-        const ww = b.w*DPR, hh = b.h*DPR;
-        const g = ctx.createLinearGradient(-ww/2, -hh/2, ww/2, hh/2);
-        g.addColorStop(0, 'rgba(30,42,74,0.95)');
-        g.addColorStop(1, 'rgba(10,18,36,0.95)');
-        ctx.fillStyle = g;
-        ctx.shadowBlur = 16*DPR; ctx.shadowColor = b.color;
-        roundedRectPath(-ww/2, -hh/2, ww, hh, Math.min(10*DPR, hh/2));
-        ctx.fill();
-        ctx.lineWidth = 2*DPR; ctx.strokeStyle = b.color;
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      // Player
+      ctx.save(); if (shake>0){ ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake); shake*=0.9; }
+      // grid overlay
+      ctx.save(); ctx.strokeStyle='rgba(114,241,184,0.07)'; ctx.lineWidth=1*DPR; const step=28*DPR; for (let x=0; x<W; x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); } for (let y=0; y<H; y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); } ctx.restore();
+      for (const b of activeBlocks){ drawBlock(b); }
       drawPlayer();
-
-      // Particles draw (guard radius)
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      for (const p of particles){
-        const alpha = Math.max(0, p.life / p.max);
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        const r = clampPos(p.size*DPR, 0.12*DPR);
-        ctx.arc(p.x, p.y, r, 0, Math.PI*2);
-        ctx.fill();
-      }
+      // particles draw
+      ctx.save(); ctx.globalCompositeOperation='lighter'; for (const p of particles){ const alpha=Math.max(0,p.life/p.max); ctx.globalAlpha=alpha; ctx.fillStyle=p.color; ctx.beginPath(); const r=clampPos(p.size*DPR, 0.12*DPR); ctx.arc(p.x, p.y, r, 0, Math.PI*2); ctx.fill(); } ctx.restore();
       ctx.restore();
-
-      ctx.restore(); // end shake scope
-
-      // HUD
-      ctx.save();
-      ctx.shadowBlur = 10*DPR; ctx.shadowColor = 'rgba(114,241,184,.5)';
-      ctx.font = `600 ${18*DPR}px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial`;
-      ctx.fillStyle = '#e6e9f2';
-      ctx.fillText(`Điểm: ${Math.floor(score)}`, 16*DPR, 12*DPR);
-      ctx.font = `600 ${14*DPR}px system-ui`;
-      ctx.fillStyle = '#b7c0d8';
-      ctx.fillText(`Kỷ lục: ${high}`, 16*DPR, 34*DPR);
-      ctx.restore();
-
-      if (state === STATE.MENU) {
-        centerText('BLOCK DODGER', 32);
-        centerText('Tránh các khối rơi • A/D hoặc ◀ ▶ để di chuyển', 16, 28);
-        centerText('Nhấn Space / chạm màn hình để bắt đầu', 16, 60, '#9dd5c3');
-      } else if (state === STATE.OVER) {
-        centerText('GAME OVER', 28);
-        centerText('Nhấn R / chạm để chơi lại', 16, 28, '#b7c0d8');
-      }
-
+      drawHUD();
+      if (state===STATE.MENU){ centerText('MATH CATCHER',32,-20); centerText('Hãy chọn cấp độ để bắt đầu',16,12,'#b7c0d8'); }
+      if (state===STATE.OVER){ centerText('HẾT LƯỢT',28,-12); centerText('Chọn cấp độ để chơi lại',16,20,'#b7c0d8'); }
       vignette();
-
-      // Footer
-      footerText('Open-source • Hiệu ứng glow + parallax • Tương thích mobile');
+      footerText('Toán + Game • Lives • Combo • Tương thích mobile');
     }
 
-    function centerText(txt, size=24, yOffset=0, color='#e6e9f2'){
-      ctx.save();
-      ctx.font = `700 ${size*DPR}px system-ui, -apple-system, Segoe UI, Roboto`;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillStyle = color;
-      ctx.shadowBlur = 10*DPR; ctx.shadowColor = 'rgba(114,241,184,.45)';
-      ctx.fillText(txt, W/2, H/2 - 80*DPR + yOffset*DPR);
-      ctx.restore();
+    function centerText(txt,size=24,yOffset=0,color='#e6e9f2'){
+      ctx.save(); ctx.font=`700 ${size*DPR}px system-ui`; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle=color; ctx.shadowBlur=10*DPR; ctx.shadowColor='rgba(114,241,184,.45)'; ctx.fillText(txt,W/2,H/2 + yOffset*DPR); ctx.restore();
     }
-
     function footerText(txt){
-      ctx.save();
-      ctx.font = `600 ${12*DPR}px system-ui`;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-      ctx.fillStyle = 'rgba(230,233,242,0.7)';
-      ctx.fillText(txt, W/2, H - 10*DPR);
-      ctx.restore();
+      ctx.save(); ctx.font=`600 ${12*DPR}px system-ui`; ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillStyle='rgba(230,233,242,0.7)'; ctx.fillText(txt,W/2,H-10*DPR); ctx.restore();
     }
 
-    function reset() {
-      t = 0; score = 0; spawnEvery = 0.9; spawnTimer = 0; blocks.length = 0; particles.length = 0; trail.length = 0;
-      player.x = (W/DPR - player.w)/2; player.vx = 0; shake = 0;
-    }
+    // particles helper
+    function emitParticles(x,y,dirx,diry,count,spdMin,spdMax,color,sizeMin,sizeMax,lifeMin,lifeMax){ for(let i=0;i<count;i++){ const ang=Math.atan2(diry,dirx)+rnd(-0.7,0.7); const spd=rnd(spdMin,spdMax); const sz=Math.max(0.5, rnd(sizeMin,sizeMax)); particles.push({ x, y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd, life:rnd(lifeMin,lifeMax), max:0, color, size:sz }); } }
 
-    function startGame(){ reset(); state = STATE.PLAYING; startBtn.style.display='none'; }
+    // ==== Tests (kept, but hidden UI) ====
+    const testStatus=document.getElementById('test-status');
+    function assert(c,m){ if(!c) throw new Error(m||'Assertion failed'); }
+    function runTests(){ try{
+      // Star radius non-negative
+      for(let i=0;i<500;i++){ const s={ z:Math.random()*1+0.3, tw:Math.random()*0.6+0.4, base:Math.random()*0.5+0.3 }; const sizeRaw=(s.z*1.8 + Math.sin((i*0.01+s.tw)*4)*0.6)*DPR; const size=clampPos(sizeRaw,0.12*DPR); assert(size>=0,'Star radius non-negative'); }
+      // Particle size > 0
+      const before=particles.length; emitParticles(0,0,1,0,20,10,50,'#fff',1,3,0.2,0.5); for(let i=before;i<particles.length;i++){ assert(particles[i].size>0,'Particle size > 0'); }
+      assert(clampPos(-1,0)===0,'clampPos clamps negatives');
+      // Division integers
+      for(let i=0;i<200;i++){ const p=genProblem(); if(p.text.includes('÷')){ const A=parseInt(p.text.split(' ÷ ')[0]); const B=parseInt(p.text.split(' ÷ ')[1]); assert(Number.isInteger(A/B),'Division yields integer'); assert((A/B)===p.ans,'Division answer matches'); } }
+      // Options include answer and unique
+      for(let i=0;i<100;i++){ const ans=rrnd(0,100); const opts=makeOptions(ans); assert(opts.length===3,'3 options'); const set=new Set(opts); assert(set.size===3,'unique options'); assert(set.has(ans),'includes correct'); }
+      // Spawn row: one correct & uniform color
+      problem={text:'2 + 2 = ?', ans:4}; spawnRow(); let c=activeBlocks.filter(b=>b.correct).length; assert(c===1,'exactly one correct'); const c0=activeBlocks[0].uiColor; assert(activeBlocks.every(b=>b.uiColor===c0),'uniform color (no reveal)');
+      // Level checks
+      level='G1'; for(let i=0;i<50;i++){ const p=genProblem(); assert(p.text.includes('+'),'G1 only +'); }
+      level='G23'; { let ok=true; for(let i=0;i<100;i++){ const p=genProblem(); if(!(/[+−×÷]/.test(p.text))) ok=false; } assert(ok,'G23 ops valid'); }
+      level='G45'; { let ok=true; for(let i=0;i<100;i++){ const p=genProblem(); if(!(/[+−×÷]/.test(p.text))) ok=false; } assert(ok,'G45 ops valid'); }
+      if(testStatus){ testStatus.textContent='Tests: ✓'; testStatus.style.color='#9ef5c8'; }
+    } catch(err){ console.error('[TEST FAILED]', err); if(testStatus){ testStatus.textContent='Tests: ✗ '+err.message; testStatus.style.color='#ffb3c1'; } } }
 
-    function frame(ts){
-      if (!last) last = ts;
-      const dt = Math.min(0.05, (ts - last) / 1000);
-      last = ts; update(dt); draw(); requestAnimationFrame(frame);
-    }
+    // ==== Events & init ====
+    function reset(){ t=0; score=0; combo=0; lives=3; problem=null; activeBlocks.length=0; particles.length=0; trail.length=0; shake=0; stats={correct:0,wrong:0,missed:0,maxCombo:0}; hideScoreboard(); }
+    function startGame(){ reset(); state=STATE.PLAYING; hideLevelModal(); }
+    function frame(ts){ if(!last) last=ts; const dt=Math.min(0.05,(ts-last)/1000); last=ts; update(dt); draw(); requestAnimationFrame(frame); }
 
-    // ==== Events ====
+    const leftBtn=document.getElementById('left'); const rightBtn=document.getElementById('right'); const startBtn=document.getElementById('start');
+    function bindHold(btn,dir){ const on=(ev)=>{ ev.preventDefault(); touchDir=dir; }; const off=(ev)=>{ ev.preventDefault(); if(touchDir===dir) touchDir=0; }; btn.addEventListener('touchstart',on,{passive:false}); btn.addEventListener('touchend',off,{passive:false}); btn.addEventListener('mousedown',on); btn.addEventListener('mouseup',off); btn.addEventListener('mouseleave',off); }
+    bindHold(leftBtn,-1); bindHold(rightBtn,1);
+
+    // Level modal actions: click to pick level -> start immediately
+    levelModal.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.lvl');
+      if(!btn) return;
+      setLevel(btn.dataset.level);
+      startGame();
+    });
+
+    function setLevel(lv){ level=lv; }
+
     window.addEventListener('resize', resize);
-    document.addEventListener('visibilitychange', () => { if (document.hidden && state === STATE.PLAYING) { state = STATE.MENU; startBtn.style.display=''; } });
-
+    document.addEventListener('visibilitychange', () => { if (document.hidden && state === STATE.PLAYING) { state = STATE.MENU; showLevelModal(); } });
     document.addEventListener('keydown', (e) => {
-      if (['ArrowLeft','ArrowRight','Space','KeyA','KeyD','KeyR','KeyT'].includes(e.code)) e.preventDefault();
+      if(['ArrowLeft','ArrowRight','Space','KeyA','KeyD','KeyR','KeyT','Digit1','Digit2','Digit3'].includes(e.code)) e.preventDefault();
       keys.add(e.code);
-      if (state === STATE.MENU && e.code === 'Space') startGame();
-      if (state === STATE.OVER && e.code === 'KeyR') startGame();
-      if (e.code === 'KeyT') runTests();
+      if(state!==STATE.PLAYING){
+        // digits to pick level then start
+        if(e.code==='Digit1'){ setLevel('G1'); startGame(); }
+        if(e.code==='Digit2'){ setLevel('G23'); startGame(); }
+        if(e.code==='Digit3'){ setLevel('G45'); startGame(); }
+        if(e.code==='Space'){ /* ignore space at menu; use level modal */ }
+      } else {
+        if(e.code==='KeyR'){ /* allow R to restart mid-play? ignore */ }
+      }
+      if(state===STATE.OVER && e.code==='KeyR'){ showLevelModal(); } // show modal again (already shown in update)
+      if(e.code==='KeyT') runTests();
     });
     document.addEventListener('keyup', (e) => keys.delete(e.code));
 
-    const leftBtn = document.getElementById('left');
-    const rightBtn = document.getElementById('right');
-    const startBtn = document.getElementById('start');
-    const testStatus = document.getElementById('test-status');
-
-    function bindHold(btn, dir){
-      const on = (ev)=>{ ev.preventDefault(); touchDir = dir; };
-      const off = (ev)=>{ ev.preventDefault(); if (touchDir === dir) touchDir = 0; };
-      btn.addEventListener('touchstart', on, {passive:false});
-      btn.addEventListener('touchend', off, {passive:false});
-      btn.addEventListener('mousedown', on);
-      btn.addEventListener('mouseup', off);
-      btn.addEventListener('mouseleave', off);
-    }
-    bindHold(leftBtn, -1); bindHold(rightBtn, 1);
-
-    canvas.addEventListener('pointerdown', () => { if (state === STATE.MENU || state === STATE.OVER) startGame(); });
-    startBtn.addEventListener('click', startGame);
-
-    // ==== Simple test harness ====
-    function assert(cond, msg){ if(!cond){ throw new Error(msg || 'Assertion failed'); } }
-
-    function runTests(){
-      try{
-        // Test 1: Star size clamp never negative, even at worst-case sin
-        for(let i=0;i<2000;i++){
-          const s = { z: Math.random()*1+0.3, tw: Math.random()*0.6+0.4, base: Math.random()*0.5+0.3 };
-          const sizeRaw = (s.z*1.8 + Math.sin((i*0.01+s.tw)*4)*0.6) * DPR;
-          const size = clampPos(sizeRaw, 0.12*DPR);
-          assert(size >= 0, 'Star radius should be non-negative');
-        }
-
-        // Test 2: Particle sizes always positive
-        const before = particles.length;
-        emitParticles(0,0,1,0,20,10,50,'#fff',1,3,0.2,0.5);
-        for(let i=before;i<particles.length;i++){
-          assert(particles[i].size > 0, 'Particle size should be > 0');
-        }
-
-        // Test 3: Arc guard value
-        assert(clampPos(-1,0) === 0, 'clampPos should clamp negatives to 0');
-
-        testStatus.textContent = 'Tests: ✓ All passed (press T to re-run)';
-        testStatus.style.color = '#9ef5c8';
-      } catch(err){
-        console.error('[TESTS FAILED]', err);
-        testStatus.textContent = 'Tests: ✗ ' + err.message + ' (press T to re-run)';
-        testStatus.style.color = '#ffb3c1';
-      }
-    }
-
-    // ==== Init ====
     resize(); requestAnimationFrame(frame);
-    if (matchMedia('(pointer: coarse)').matches) startBtn.style.display='';
-
-    // Run tests once at startup
+    // Do NOT show the old start button; modal handles starting.
+    // Run tests once at startup (UI hidden)
     runTests();
+    // Ensure modal is visible on load
+    showLevelModal();
   })();
   </script>
 </body>
